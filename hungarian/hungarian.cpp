@@ -26,20 +26,23 @@
 
 #define verbose (0)
 
-Hungarian::Hungarian()
+
+template<class T>
+Hungarian<T>::Hungarian()
 {
 	//much ado about nothing
 	m_rows = 1;
 	m_cols = 1;
 
-	m_costmatrix.resize(m_rows, vector<int>(m_cols,0));
+	m_costmatrix.resize(m_rows, vector<T>(m_cols,0));
 	m_assignment.resize(m_rows, vector<int>(m_cols,0));
 }
 
-Hungarian::Hungarian(const vector<vector<int> >& input_matrix, int rows, int cols, MODE mode)
+template<class T>
+Hungarian<T>::Hungarian(const vector<vector<T> >& input_matrix, int rows, int cols, MODE mode)
 {
   int i,j, org_cols, org_rows;
-  int max_cost;
+  T max_cost;
   max_cost = 0;
   
   org_cols = cols;
@@ -57,7 +60,7 @@ Hungarian::Hungarian(const vector<vector<int> >& input_matrix, int rows, int col
   m_rows = rows;
   m_cols = cols;
 
-  m_costmatrix.resize(rows, vector<int>(cols,0));
+  m_costmatrix.resize(rows, vector<T>(cols,0));
   m_assignment.resize(rows, vector<int>(cols,0));
 
   for(i=0; i<m_rows; i++) 
@@ -94,7 +97,8 @@ Hungarian::Hungarian(const vector<vector<int> >& input_matrix, int rows, int col
 }
 
 
-void hungarian_print_matrix(const vector<vector<int> >& C, int rows, int cols) 
+template<class T>
+void hungarian_print_matrix(const vector<vector<T> >& C, int rows, int cols)
 {
 	int i,j;
 	fprintf(stderr , "\n");
@@ -110,15 +114,18 @@ void hungarian_print_matrix(const vector<vector<int> >& C, int rows, int cols)
 	fprintf(stderr, "\n");
 }
 
-void Hungarian::print_assignment() {
+template<class T>
+void Hungarian<T>::print_assignment() {
   hungarian_print_matrix(m_assignment, m_rows, m_cols) ;
 }
 
-void Hungarian::print_cost() {
+template<class T>
+void Hungarian<T>::print_cost() {
   hungarian_print_matrix(m_costmatrix, m_rows, m_cols) ;
 }
 
-void Hungarian::print_status() 
+template<class T>
+void Hungarian<T>::print_status()
 {
   
   fprintf(stderr,"cost:\n");
@@ -129,11 +136,12 @@ void Hungarian::print_status()
   
 }
 
-int Hungarian::init(const vector<vector<int> >& input_matrix, int rows, int cols, MODE mode) 
+template<class T>
+int Hungarian<T>::init(const vector<vector<T> >& input_matrix, int rows, int cols, MODE mode)
 {
 
   int i,j, org_cols, org_rows;
-  int max_cost;
+  T max_cost;
   max_cost = 0;
   
   org_cols = cols;
@@ -147,7 +155,7 @@ int Hungarian::init(const vector<vector<int> >& input_matrix, int rows, int cols
   m_rows = rows;
   m_cols = cols;
 
-  m_costmatrix.resize(rows, vector<int>(cols,0));
+  m_costmatrix.resize(rows, vector<T>(cols,0));
   m_assignment.resize(rows, vector<int>(cols,0));
 
   for(i=0; i<m_rows; i++) 
@@ -166,7 +174,7 @@ int Hungarian::init(const vector<vector<int> >& input_matrix, int rows, int cols
   if (mode == HUNGARIAN_MODE_MAXIMIZE_UTIL) {
     for(i=0; i<m_rows; i++) {
       for(j=0; j<m_cols; j++) {
-	m_costmatrix[i][j] =  max_cost - m_costmatrix[i][j];
+        m_costmatrix[i][j] =  max_cost - m_costmatrix[i][j];
       }
     }
   }
@@ -179,7 +187,8 @@ int Hungarian::init(const vector<vector<int> >& input_matrix, int rows, int cols
   return rows;
 }
 
-bool Hungarian::check_solution(const vector<int>& row_dec, const vector<int>& col_inc, const vector<int>& col_vertex)
+template<class T>
+bool Hungarian<T>::check_solution(const vector<T>& row_dec, const vector<T>& col_inc, const vector<int>& col_vertex)
 {
 	int k, l, m, n;
 
@@ -215,7 +224,9 @@ bool Hungarian::check_solution(const vector<int>& row_dec, const vector<int>& co
 	return true;
   // End doublecheck the solution 23
 }
-bool Hungarian::assign_solution(const vector<int>& row_dec,const vector<int>&  col_inc, const vector<int>&  col_vertex)
+
+template<class T>
+bool Hungarian<T>::assign_solution(const vector<T>& row_dec,const vector<T>&  col_inc, const vector<int>&  col_vertex)
 {
 	  // End Hungarian algorithm 18
 	int i, j, k, l, m, n;
@@ -252,18 +263,21 @@ bool Hungarian::assign_solution(const vector<int>& row_dec,const vector<int>&  c
 
 }
 
-bool Hungarian::solve()
+template<class T>
+bool Hungarian<T>::solve()
 {
-	int i, j, m, n, k, l, s, t, q, unmatched, cost;
+	int i, j, m, n, k, l, t, q, unmatched;
+	T s, cost, epsilon(1e-9);
 
 	m = m_rows;
 	n = m_cols;
 
-	int INF = std::numeric_limits<int>::max();
+	T INF = std::numeric_limits<T>::max();
 
 	//vertex alternating paths,
 	vector<int> col_vertex(m), row_vertex(n), unchosen_row(m), parent_row(n),
-				row_dec(m),  col_inc(n),  slack_row(m),    slack(n);
+				slack_row(m);
+	vector<T>   slack(n),  col_inc(n), row_dec(m);
 
 	cost=0;
 
@@ -305,7 +319,7 @@ bool Hungarian::solve()
 			cost += s;
 		}
 
-		if (s!=0)
+		if (fabs(s)>=epsilon)
 		{
 			for (k=0;k<m;k++)
 			{
@@ -415,9 +429,9 @@ bool Hungarian::solve()
 				s=row_dec[k];
 				for (l=0;l<n;l++)
 				{
-					if (slack[l])
+					if (fabs(slack[l])>=epsilon)
 					{
-						int del;
+						T del;
 						del=m_costmatrix[k][l]-s+col_inc[l];
 						if (del<slack[l])
 						{
@@ -450,7 +464,7 @@ bool Hungarian::solve()
 		s=INF;
 		for (l=0;l<n;l++)
 		{
-			if (slack[l] && slack[l]<s)
+			if (fabs(slack[l])>epsilon && fabs(slack[l]-s)>epsilon)
 			{
 				s=slack[l];
 			}
@@ -462,10 +476,10 @@ bool Hungarian::solve()
 		for (l=0;l<n;l++)
 		{
 			//check slack
-			if (slack[l])
+			if (fabs(slack[l])>epsilon)
 			{
 				slack[l]-=s;
-				if (slack[l]==0)
+				if (fabs(slack[l])<=epsilon)
 				{
 					// Begin look at a new zero 22
 					k=slack_row[l];
@@ -478,7 +492,7 @@ bool Hungarian::solve()
 					if (row_vertex[l]<0)
 					{
 						for (j=l+1;j<n;j++)
-							if (slack[j]==0)
+							if (fabs(slack[j])<=epsilon)
 							{
 								col_inc[j]+=s;
 							}
@@ -571,12 +585,14 @@ bool Hungarian::solve()
 
 //ACCESSORS
 
-int Hungarian::cost() const
+template<class T>
+int Hungarian<T>::cost() const
 {
 	return m_cost;
 }
 
-const vector<vector<int> >& Hungarian::assignment() const
+template<class T>
+const vector<vector<T> >& Hungarian<T>::assignment() const
 {
 	return m_assignment;
 }

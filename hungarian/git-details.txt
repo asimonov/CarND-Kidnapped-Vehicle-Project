@@ -1,0 +1,5 @@
+merged from https://github.com/RoboJackets/hungarian
+as subtree hungarian
+using these instructions: https://help.github.com/articles/about-git-subtree-merges/
+in the future to update:
+git pull -s subtree hungarian master
