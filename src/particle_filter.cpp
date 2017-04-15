@@ -10,6 +10,7 @@
 #include <iostream>
 #include <numeric>
 #include <random>
+#include <map>
 
 
 #include "particle_filter.h"
@@ -133,6 +134,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], s
     // 1. find all map landmarks withing sensor_range around particle, save in close_landmarks
     // 2. loop over landmarks and find closest observations to each.
     std::vector<LandmarkObs> close_landmarks;
+    std::vector<double> close_landmark_distances;
     LandmarkObs particle_position; // new object to convert particle position format to observation format
     particle_position.x = p.x;
     particle_position.y = p.y;
@@ -140,10 +142,18 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], s
     {
       obs.x = map_landmarks.landmark_list[l].x_f; // reusing temp object obs
       obs.y = map_landmarks.landmark_list[l].y_f;
-      if (ObservationsDistance(obs, particle_position) <= sensor_range) {
+      double d = ObservationsDistance(obs, particle_position);
+      if (d <= sensor_range) {
         close_landmarks.push_back(obs); // push_back copies obs as new object
+        close_landmark_distances.push_back(d);
       }
     }
+    // now sort the landmarks by distance from the particle
+    // using approach: http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
+    vector<int> sort_idx(close_landmark_distances.size());
+    std::iota(sort_idx.begin(), sort_idx.end(), 0); // original indices 0, 1, 2...
+    std::sort(sort_idx.begin(), sort_idx.end(),
+              [&close_landmark_distances](int i1, int i2){return close_landmark_distances[i1]<close_landmark_distances[i2];});
     // do the nearest neighbour and calculate probabilities at the same time
     //std::vector<LandmarkObs> close_observations;
     // cummulative probability for this particle for all observations
@@ -152,12 +162,13 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], s
     //double min_prob = Gaussian2DNoCorrelation(sensor_range, 0, sensor_range, 0, std_landmark[0], std_landmark[1]);
     for (int l=0; l<close_landmarks.size(); l++)
     {
+      LandmarkObs lm = close_landmarks[sort_idx[l]/*using sort by distance*/];
       // note: observations are removed from observations list (our own copy in this function)
       double dist, min_dist = numeric_limits<double>::max();
       int min_o = -1;
       for (int o=0; o<observations_map_coord.size(); o++)
       {
-        dist = ObservationsDistance(close_landmarks[l], observations_map_coord[o]);
+        dist = ObservationsDistance(lm, observations_map_coord[o]);
         if (dist < min_dist)
         {
           min_dist = dist;
@@ -167,10 +178,12 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], s
       if (min_o>-1)
       {
         // we matched landmark to observation. calculate probability and remove that observation from further consideration
-        prob *= Gaussian2DNoCorrelation(observations_map_coord[min_o].x, close_landmarks[l].x,
-                                        observations_map_coord[min_o].y, close_landmarks[l].y,
+        prob *= Gaussian2DNoCorrelation(observations_map_coord[min_o].x, lm.x,
+                                        observations_map_coord[min_o].y, lm.y,
                                         std_landmark[0], std_landmark[1]);
         observations_map_coord.erase(observations_map_coord.begin()+min_o); // this is horrible in terms of performance as it has to shift remaining elements
+        // let try to base our probability likelyhood on just one landmark 'match', the closest one
+        //if (l>=1) break; // dont consider other landmarks
       } else
       {
         // this is the case we have run out of observations to match.
@@ -202,18 +215,28 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], s
 }
 
 void ParticleFilter::resample() {
-  // TODO: Resample particles with replacement with probability proportional to their weight. 
-  // NOTE: You may find std::discrete_distribution helpful here.
-  //   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
-
+  // Resample particles with replacement with probability proportional to their weight.
+  std::random_device rd;
+  std::default_random_engine gen(rd());
+  std::discrete_distribution<> d(weights.begin(), weights.end()); // initialize discrete distribution over particles with weights that we calculated
+  // sample from the distribution
+  std::vector<Particle> particles_new(num_particles);
+  std::map<int, int> m;
+  for (int i=0; i<num_particles; i++)
+  {
+    int sample = d(gen);
+    ++m[sample];
+    particles_new[i] = particles[sample];
+  }
+  particles = particles_new;
 }
 
-void ParticleFilter::write(std::string filename) {
+void ParticleFilter::write(std::string filename, double gt_x, double gt_y, double gt_theta) {
   // You don't need to modify this file.
   std::ofstream dataFile;
   dataFile.open(filename, std::ios::app);
   for (int i = 0; i < num_particles; ++i) {
-    dataFile << particles[i].x << " " << particles[i].y << " " << particles[i].theta << "\n";
+    dataFile << particles[i].x << " " << particles[i].y << " " << particles[i].theta << " " << particles[i].weight << " " << gt_x << " " << gt_y<< " " << gt_theta <<"\n";
   }
   dataFile.close();
 }

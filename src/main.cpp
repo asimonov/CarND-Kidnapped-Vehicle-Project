@@ -113,7 +113,10 @@ int main() {
 
 		// Update the weights and resample
 		pf.updateWeights(sensor_range, sigma_landmark, noisy_observations, map);
-		pf.resample();
+        ostringstream file2;
+        file2 << "data/particles/particles_" << setfill('0') << setw(6) << i+1 << ".txt";
+        pf.write(file2.str(), gt[i].x, gt[i].y, gt[i].theta);
+        pf.resample();
 		
 		// Calculate and output the average weighted error of the particle filter over all time steps so far.
 		vector<Particle> particles = pf.particles;
