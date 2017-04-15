@@ -90,51 +90,115 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 
 }
 
+// calculate 2D-gaussian probability with 0 correlation
+double Gaussian2DNoCorrelation(double x, double mu_x, double y, double mu_y, double sigma_x, double sigma_y)
+{
+  return (1./(2.*M_PI*sigma_x*sigma_y)) * exp( - ( pow(x-mu_x, 2)/(2*sigma_x*sigma_x) + pow(y-mu_y, 2)/(2*sigma_y*sigma_y) ) );
+}
+
+// calculate distance between 2 LandmarkObs objects
+double ObservationsDistance(LandmarkObs& obs1, LandmarkObs& obs2)
+{
+  return sqrt( pow(obs1.x - obs2.x, 2) + pow(obs1.y - obs2.y, 2) );
+}
+
+
 // Update the weights of each particle using a mult-variate Gaussian distribution
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], std::vector<LandmarkObs> observations, Map map_landmarks) {
 
+  // if there are no observations do nothing as we have no new information to incorporate into weights
+  if (observations.size()==0)
+    return;
+
   // loop over all particles
   Particle p;
+  double sum_weights = 0.0; // sum of calculated weights for normalisation
   for (int i=0; i<num_particles; i++) {
     p = particles[i];
 
     // translate observations from particle coordinates to map coordinates
     std::vector<LandmarkObs> observations_map_coord; // observations in map coordinates
-    for (int j=0; j<observations.size(); j++)
+    LandmarkObs obs; // temp object
+    for (int o=0; o<observations.size(); o++)
     {
-      LandmarkObs obs = observations[j]; // copy observation as new object
+      obs = observations[o]; // copy observation as new object
       CarToMap(obs.x, obs.y, p.x, p.y, p.theta, obs.x, obs.y); // we are overwriting obs.x and obs.y inside function
-      observations_map_coord.push_back(obs);
+      observations_map_coord.push_back(obs); // copies obs as new object
     }
 
-    // associate observations with landmarks
-    // overview of the algorithm:
+    // Associate observations with landmarks using 'nearest neighbour'
+    // The alternative would be to use Hungarian assignment algorithm (http://csclab.murraystate.edu/~bob.pilgrim/445/munkres.html)
+    // TODO: I may implement Hungarian algorithm later if I have time.
+    // The 'nearest neighbour' overview is:
     // 1. find all map landmarks withing sensor_range around particle, save in close_landmarks
-    // 2. build distance matrix (obs -> close_landmark)
-    // 3. use Hungarian algorithm to associate observation to landmarks
+    // 2. loop over landmarks and find closest observations to each.
     std::vector<LandmarkObs> close_landmarks;
-    for (int i=0; i<map_landmarks.landmark_list.size(); i++)
+    LandmarkObs particle_position; // new object to convert particle position format to observation format
+    particle_position.x = p.x;
+    particle_position.y = p.y;
+    for (int l=0; l<map_landmarks.landmark_list.size(); l++)
     {
-      Map::single_landmark_s l = map_landmarks.landmark_list[i];
-      double x_diff = l.x_f - p.x;
-      double y_diff = l.y_f - p.y;
-      double d = sqrt(x_diff*x_diff + y_diff*y_diff);
-      if (d<=sensor_range) {
-        LandmarkObs obs; // new object
-        obs.x = l.x_f;
-        obs.y = l.y_f;
-        close_landmarks.push_back(obs);
+      obs.x = map_landmarks.landmark_list[l].x_f; // reusing temp object obs
+      obs.y = map_landmarks.landmark_list[l].y_f;
+      if (ObservationsDistance(obs, particle_position) <= sensor_range) {
+        close_landmarks.push_back(obs); // push_back copies obs as new object
       }
     }
+    // do the nearest neighbour and calculate probabilities at the same time
+    //std::vector<LandmarkObs> close_observations;
+    // cummulative probability for this particle for all observations
+    double prob = 1.0;
+    // probability for landmark missing in the measurements. assume it is at sensor range. should give really small probability
+    //double min_prob = Gaussian2DNoCorrelation(sensor_range, 0, sensor_range, 0, std_landmark[0], std_landmark[1]);
+    for (int l=0; l<close_landmarks.size(); l++)
+    {
+      // note: observations are removed from observations list (our own copy in this function)
+      double dist, min_dist = numeric_limits<double>::max();
+      int min_o = -1;
+      for (int o=0; o<observations_map_coord.size(); o++)
+      {
+        dist = ObservationsDistance(close_landmarks[l], observations_map_coord[o]);
+        if (dist < min_dist)
+        {
+          min_dist = dist;
+          min_o = o;
+        }
+      }
+      if (min_o>-1)
+      {
+        // we matched landmark to observation. calculate probability and remove that observation from further consideration
+        prob *= Gaussian2DNoCorrelation(observations_map_coord[min_o].x, close_landmarks[l].x,
+                                        observations_map_coord[min_o].y, close_landmarks[l].y,
+                                        std_landmark[0], std_landmark[1]);
+        observations_map_coord.erase(observations_map_coord.begin()+min_o); // this is horrible in terms of performance as it has to shift remaining elements
+      } else
+      {
+        // this is the case we have run out of observations to match.
+        // one way here is to assign minimum probability to this landmarks. but that's not good. it will produce zero total probability
+        //prob *= min_prob;
+        // instead we just ignore this landmark. may be it was occluded or there is fog and sensor cannot see it or whatever.
+        // let's just focus on landmarks we can match
+      }
+    } // loop over close landmarks
 
-    //dataAssociation()
-
-    // calculate probabilities
-    float prob = 1.0; // probability
-
+    // Use cummulative probability as the particle weight.
+    // But if there are no landmarks close to this particle (within range) then weight should be zero.
+    // So we assume the landmark density is such that there must be a landmark within our sensor range.
+    // If it is not the case due to poor map the car should rely on other ways to localize. visual odometry, gps etc.
+    // If map is detailed then our particle is really off the map and should be eliminated, hence zero weight.
+    if (close_landmarks.size()) {
+      p.weight = prob;
+      sum_weights += prob;
+    } else
+      p.weight = 0.;
     particles[i] = p;
-  }
+  } // loop over particles
 
+  //normalize weights
+  for (int i=0; i<num_particles; i++) {
+    particles[i].weight /= sum_weights;
+    weights[i] = particles[i].weight;
+  }
 }
 
 void ParticleFilter::resample() {
