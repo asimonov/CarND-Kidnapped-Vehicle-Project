@@ -19,7 +19,7 @@ using namespace std;
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
   // Set the number of particles.
-  num_particles = 100;
+  num_particles = 1000;
   weights.resize(num_particles, 0.);
   particles.resize(num_particles);
 
@@ -55,7 +55,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
   Particle p;
   // optimize calculation outside the loop
-  float vy = velocity / yaw_rate;
+  float vy = fabs(yaw_rate)>1e-4 ? velocity / yaw_rate : velocity;
   float tdt = yaw_rate * delta_t;
   // loop over all particles
   for (int i=0; i<num_particles; i++) {
@@ -65,9 +65,13 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
     // do theta prediction first to add noise. then that noise affects x and y
     // assuming noise is not proportional to delta_t. not clear from instructions if it should be
     p.theta += tdt                             + N_theta(gen);
-    p.x += vy * (sin(p.theta) - sin(thetaold)) + N_x(gen);
-    p.y += vy * (cos(thetaold) - cos(p.theta)) + N_y(gen);
-
+    if (fabs(yaw_rate)>1e-4) {
+      p.x += vy * (sin(p.theta) - sin(thetaold)) + N_x(gen);
+      p.y += vy * (cos(thetaold) - cos(p.theta)) + N_y(gen);
+    } else {
+      p.x += velocity * delta_t * cos(thetaold) + N_x(gen);
+      p.y += velocity * delta_t * sin(thetaold) + N_y(gen);
+    }
     particles[i] = p; // overwrite particle with new state
   }
 
@@ -79,8 +83,8 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 void CarToMap(double x, double y, double x_car_map, double y_car_map, double phi_car_map, double& x_map, double & y_map)
 {
   // using http://planning.cs.uiuc.edu/node99.html
-  x_map = x * cos(phi_car_map) + y * sin(phi_car_map) + x_car_map;
-  y_map = -x * sin(phi_car_map) + y * cos(phi_car_map) + y_car_map;
+  x_map = x * cos(phi_car_map) - y * sin(phi_car_map) + x_car_map;
+  y_map = x * sin(phi_car_map) + y * cos(phi_car_map) + y_car_map;
 }
 
 void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::vector<LandmarkObs>& observations) {
@@ -95,6 +99,11 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 double Gaussian2DNoCorrelation(double x, double mu_x, double y, double mu_y, double sigma_x, double sigma_y)
 {
   return (1./(2.*M_PI*sigma_x*sigma_y)) * exp( - ( pow(x-mu_x, 2)/(2*sigma_x*sigma_x) + pow(y-mu_y, 2)/(2*sigma_y*sigma_y) ) );
+}
+// calculate 2D-gaussian log(probability) with 0 correlation
+double LogGaussian2DNoCorrelation(double x, double mu_x, double y, double mu_y, double sigma_x, double sigma_y)
+{
+  return - log(2.*M_PI*sigma_x*sigma_y) - ( pow(x-mu_x, 2)/(2*sigma_x*sigma_x) + pow(y-mu_y, 2)/(2*sigma_y*sigma_y) ) ;
 }
 
 // calculate distance between 2 LandmarkObs objects
@@ -155,11 +164,9 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], s
     std::sort(sort_idx.begin(), sort_idx.end(),
               [&close_landmark_distances](int i1, int i2){return close_landmark_distances[i1]<close_landmark_distances[i2];});
     // do the nearest neighbour and calculate probabilities at the same time
-    //std::vector<LandmarkObs> close_observations;
     // cummulative probability for this particle for all observations
     double prob = 1.0;
     // probability for landmark missing in the measurements. assume it is at sensor range. should give really small probability
-    //double min_prob = Gaussian2DNoCorrelation(sensor_range, 0, sensor_range, 0, std_landmark[0], std_landmark[1]);
     for (int l=0; l<close_landmarks.size(); l++)
     {
       LandmarkObs lm = close_landmarks[sort_idx[l]/*using sort by distance*/];
@@ -178,6 +185,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], s
       if (min_o>-1)
       {
         // we matched landmark to observation. calculate probability and remove that observation from further consideration
+        // we will be summing log likelyhoods
         prob *= Gaussian2DNoCorrelation(observations_map_coord[min_o].x, lm.x,
                                         observations_map_coord[min_o].y, lm.y,
                                         std_landmark[0], std_landmark[1]);
@@ -201,17 +209,28 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], s
     // If map is detailed then our particle is really off the map and should be eliminated, hence zero weight.
     if (close_landmarks.size()) {
       p.weight = prob;
-      sum_weights += prob;
+      sum_weights += p.weight;
     } else
       p.weight = 0.;
     particles[i] = p;
   } // loop over particles
 
+  if (sum_weights < 1e-9)
+    cout << "VERY SMALL WEIGHTS" << endl;
+
+  if (sum_weights == 0)
+    cout << "ZERO WEIGHTS SUM. KAPUT!" << endl;
+
   //normalize weights
+  double max_weight = 0.;
   for (int i=0; i<num_particles; i++) {
-    particles[i].weight /= sum_weights;
+    particles[i].weight /= sum_weights > 1e-14 ? sum_weights : 1e-14;
+    if (particles[i].weight > max_weight)
+      max_weight = particles[i].weight;
     weights[i] = particles[i].weight;
   }
+
+  cout << "max weight: " << max_weight << endl;
 }
 
 void ParticleFilter::resample() {
@@ -228,6 +247,8 @@ void ParticleFilter::resample() {
     ++m[sample];
     particles_new[i] = particles[sample];
   }
+  cout << "number of particles surviving: " << m.size() << endl;
+
   particles = particles_new;
 }
 
