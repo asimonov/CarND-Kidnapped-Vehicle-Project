@@ -19,7 +19,7 @@ using namespace std;
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
   // Set the number of particles.
-  num_particles = 1000;
+  num_particles = 100;
   weights.resize(num_particles, 0.);
   particles.resize(num_particles);
 
@@ -61,17 +61,15 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
   for (int i=0; i<num_particles; i++) {
     p = particles[i];
 
-    float thetaold = p.theta;
-    // do theta prediction first to add noise. then that noise affects x and y
-    // assuming noise is not proportional to delta_t. not clear from instructions if it should be
-    p.theta += tdt                             + N_theta(gen);
-    if (fabs(yaw_rate)>1e-4) {
-      p.x += vy * (sin(p.theta) - sin(thetaold)) + N_x(gen);
-      p.y += vy * (cos(thetaold) - cos(p.theta)) + N_y(gen);
+    double thetanew = p.theta + tdt;
+    if (fabs(yaw_rate)>1e-6) {
+      p.x += vy * (sin(thetanew) - sin(p.theta)) + N_x(gen);
+      p.y += vy * (cos(p.theta) - cos(thetanew)) + N_y(gen);
     } else {
-      p.x += velocity * delta_t * cos(thetaold) + N_x(gen);
-      p.y += velocity * delta_t * sin(thetaold) + N_y(gen);
+      p.x += velocity * delta_t * cos(p.theta) + N_x(gen);
+      p.y += velocity * delta_t * sin(p.theta) + N_y(gen);
     }
+    p.theta = thetanew + N_theta(gen);
     particles[i] = p; // overwrite particle with new state
   }
 
