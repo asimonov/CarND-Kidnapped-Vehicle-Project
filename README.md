@@ -34,7 +34,7 @@ Success! Your particle filter passed!
 Provided notebook [data-exploration.ipynb](./data-exploration.ipynb) visualises the data
 and creates the following animation of how filter works (click to see animation):
 
-![](./particle_animation.mp4)
+[![Particle Filter Visualisation](./particle_filter.png)](./particle_animation.mp4)
 
 
 # Implementing the Particle Filter
