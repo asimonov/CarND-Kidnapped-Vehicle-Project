@@ -233,7 +233,7 @@ void ParticleFilter::resample() {
   std::discrete_distribution<> d(weights.begin(), weights.end()); // initialize discrete distribution over particles with weights that we calculated
   // sample from the distribution
   std::vector<Particle> particles_new(num_particles);
-  std::map<int, int> m;
+  std::map<int, int> m; // this is to count how many particles survived
   for (int i=0; i<num_particles; i++)
   {
     int sample = d(gen);
