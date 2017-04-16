@@ -16,14 +16,13 @@ Once you have this repository on your machine, `cd` into the repository's root d
 
 ```
 > ./clean.sh
-
 > ./build.sh
-
 > ./run.sh
 ```
 
 If everything worked you should see something like the following output:
 
+```
 Time step: 2444
 Cumulative mean weighted error: x .1 y .1 yaw .02
 Runtime (sec): 38.187226
