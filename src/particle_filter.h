@@ -99,7 +99,7 @@ public:
 	 * write Writes particle positions to a file.
 	 * @param filename File to write particle positions to.
 	 */
-	void write(std::string filename, double gt_x, double gt_y, double gt_theta);
+	void write(std::string filename);
 	
 	/**
 	 * initialized Returns whether particle filter is initialized yet or not.

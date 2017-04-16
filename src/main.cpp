@@ -117,7 +117,7 @@ int main() {
         // added by me
         ostringstream file2;
         file2 << "data/particles/particles_" << setfill('0') << setw(6) << i+1 << ".txt";
-        pf.write(file2.str(), gt[i].x, gt[i].y, gt[i].theta);
+        pf.write(file2.str());
 
         pf.resample();
 		

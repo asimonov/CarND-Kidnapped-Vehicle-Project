@@ -246,11 +246,11 @@ void ParticleFilter::resample() {
 }
 
 // write particles to the specified file
-void ParticleFilter::write(std::string filename, double gt_x, double gt_y, double gt_theta) {
+void ParticleFilter::write(std::string filename) {
   std::ofstream dataFile;
   dataFile.open(filename, std::ios::app);
   for (int i = 0; i < num_particles; ++i) {
-    dataFile << particles[i].x << " " << particles[i].y << " " << particles[i].theta << " " << particles[i].weight << " " << gt_x << " " << gt_y<< " " << gt_theta <<"\n";
+    dataFile << particles[i].x << " " << particles[i].y << " " << particles[i].theta << " " << particles[i].weight <<"\n";
   }
   dataFile.close();
 }
